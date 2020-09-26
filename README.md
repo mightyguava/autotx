@@ -1,2 +1,7 @@
 # autotx
+
+[![GoDoc](https://img.shields.io/badge/pkg.go.dev-doc-blue)](http://pkg.go.dev/github.com/mightyguava/autotx)
+
 Golang transaction wrapper that supports rollback and retry on error
+
+See [package docs](http://pkg.go.dev/github.com/mightyguava/autotx) for documentation
