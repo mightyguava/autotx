@@ -3,7 +3,6 @@ package autotx
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"math"
 	"time"
@@ -29,7 +28,7 @@ func Transact(ctx context.Context, conn *sql.DB, operation func(tx *sql.Tx) erro
 	defer func() {
 		if p := recover(); p != nil {
 			if err := tx.Rollback(); err != nil {
-				p = errors.New(fmt.Sprintf("panic in transaction, AND rollback failed with error: %v, original panic: %v", err, p))
+				p = fmt.Errorf("panic in transaction, AND rollback failed with error: %v, original panic: %v", err, p)
 			}
 			panic(p)
 		}
