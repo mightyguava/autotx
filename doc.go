@@ -18,7 +18,7 @@
 //
 // Manage the transaction lifecycle
 //
-// Using the The Transact function wraps the transaction operation, committing on completion, or rolling back the
+// Using the The Transact function wraps the transactional operation, committing on completion, or rolling back the
 // transaction on error or panic. This can simplify operations significantly. The operation above would look like
 //
 //     autotx.Transact(ctx, db, func(tx *sql.Tx) error {
@@ -27,9 +27,9 @@
 //     })
 //
 // The TransactWithRetry function behaves identically like the Transact function, but will retry errors returned
-// by the operation according to policies defined in autotx.RetryOpts{}.
+// by the operation according to policies defined in autotx.RetryOptions{}.
 //
-//     autotx.TransactWithRetry(ctx, db, autotx.RetryOpts{}, func(tx *sql.Tx) error {
+//     autotx.TransactWithRetry(ctx, db, autotx.RetryOptions{}, func(tx *sql.Tx) error {
 //         _, err := tx.ExecContext(ctx, "INSERT INTO dinosaurs VALUES (?)", "Nothronychus")
 //         return err
 //     }

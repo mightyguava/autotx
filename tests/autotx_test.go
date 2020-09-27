@@ -95,7 +95,7 @@ func TestTransactWithRetry_TerminatesAfterMaxRetries(t *testing.T) {
 	txErr := errors.New("retryable")
 	count := 0
 	sleepCount := &sleepCounter{}
-	err = autotx.TransactWithRetry(context.Background(), db, autotx.RetryOpts{
+	err = autotx.TransactWithRetry(context.Background(), db, autotx.RetryOptions{
 		MaxRetries: maxRetries,
 		Sleep:      sleepCount.Sleep,
 	}, func(tx *sql.Tx) error {
@@ -118,7 +118,7 @@ func TestTransactWithRetry_Success(t *testing.T) {
 	mock.ExpectCommit()
 	retryable := errors.New("retryable")
 	count := 0
-	err = autotx.TransactWithRetry(context.Background(), db, autotx.RetryOpts{MaxRetries: 3}, func(tx *sql.Tx) error {
+	err = autotx.TransactWithRetry(context.Background(), db, autotx.RetryOptions{MaxRetries: 3}, func(tx *sql.Tx) error {
 		count++
 		if count == 1 {
 			return retryable

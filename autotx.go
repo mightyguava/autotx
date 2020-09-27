@@ -15,13 +15,25 @@ var DefaultMaxRetries = 5
 // retryable. By default, all errors are retryable. A RollbackErr is never retryable..
 var DefaultIsRetryable = alwaysRetryable
 
-// Transact executes the operation inside a transaction, committing the transaction on operation completion. If the
-// operation returns an error or panic, the transaction will automatically be rolled back, returning the original error
-// or propagating the original panic. If the rollback caused by an error also receives an error, a RollbackErr will
-// be returned. If the rollback caused by a panic also receives an error, the error message and original panic will
-// be wrapped inside an error and propagated as a new panic.
+// Transact executes the operation inside a transaction, committing the transaction on completion. If the operation
+// returns an error or panic, the transaction will be rolled back, returning the original error or propagating the
+// original panic. If the rollback caused by an error also receives an error, a RollbackErr will be returned. If the
+// rollback caused by a panic returns an error, the error message and original panic merged and propagated as a new
+// panic.
 func Transact(ctx context.Context, conn *sql.DB, operation func(tx *sql.Tx) error) (err error) {
-	tx, err := conn.BeginTx(ctx, nil)
+	return TransactWithOptions(ctx, conn, nil, operation)
+}
+
+// TransactWithOptions executes the operation inside a transaction, committing the transaction on completion. If the
+// operation returns an error or panic, the transaction will be rolled back, returning the original error or propagating
+// the original panic. If the rollback caused by an error also receives an error, a RollbackErr will be returned. If the
+// rollback caused by a panic returns an error, the error message and original panic merged and propagated as a new
+// panic.
+//
+// The provided TxOptions is optional and may be nil if defaults should be used. If a non-default isolation level is
+// used that the driver doesn't support, an error will be returned.
+func TransactWithOptions(ctx context.Context, conn *sql.DB, txOpts *sql.TxOptions, operation func(tx *sql.Tx) error) (err error) {
+	tx, err := conn.BeginTx(ctx, txOpts)
 	if err != nil {
 		return err
 	}
@@ -47,38 +59,51 @@ func Transact(ctx context.Context, conn *sql.DB, operation func(tx *sql.Tx) erro
 	return
 }
 
-// TransactWithRetry runs the operation using Transact, performing retries according to RetryOpts. If all retries
-// fail, the error from the last attempt will be returned. If a rollback fails, no further attempts will be made
-// and the RollbackErr will be returned.
+// TransactWithRetry runs the operation using Transact, performing retries according to RetryOptions. If all retries
+// fail, the error from the last attempt will be returned. If a rollback fails, no further attempts will be made and the
+// RollbackErr will be returned.
 //
 // Since the transaction operation may be executed multiple times, it is important that any mutations it applies
 // to application state (outside the database) be idempotent.
-func TransactWithRetry(ctx context.Context, conn *sql.DB, opts RetryOpts, operation func(tx *sql.Tx) error) error {
-	if opts.MaxRetries == 0 {
-		opts.MaxRetries = DefaultMaxRetries
+func TransactWithRetry(ctx context.Context, conn *sql.DB, retry RetryOptions, operation func(tx *sql.Tx) error) error {
+	return TransactWithRetryAndOptions(ctx, conn, nil, retry, operation)
+}
+
+// TransactWithRetryAndOptions runs the operation using Transact, performing retries according to RetryOptions. If all
+// retries fail, the error from the last attempt will be returned. If a rollback fails, no further attempts will be made
+// and the RollbackErr will be returned.
+//
+// Since the transaction operation may be executed multiple times, it is important that any mutations it applies to
+// application state (outside the database) be idempotent.
+//
+// The provided TxOptions is optional and may be nil if defaults should be used. If a non-default isolation level is
+// used that the driver doesn't support, an error will be returned.
+func TransactWithRetryAndOptions(ctx context.Context, conn *sql.DB, txOpts *sql.TxOptions, retry RetryOptions, operation func(tx *sql.Tx) error) error {
+	if retry.MaxRetries == 0 {
+		retry.MaxRetries = DefaultMaxRetries
 	}
-	if opts.MaxRetries < 0 {
-		opts.MaxRetries = math.MaxInt32
+	if retry.MaxRetries < 0 {
+		retry.MaxRetries = math.MaxInt32
 	}
-	if opts.BackOff == nil {
-		opts.BackOff = newSimpleExponentialBackOff().NextBackOff
+	if retry.BackOff == nil {
+		retry.BackOff = newSimpleExponentialBackOff().NextBackOff
 	}
-	if opts.IsRetryable == nil {
-		opts.IsRetryable = DefaultIsRetryable
+	if retry.IsRetryable == nil {
+		retry.IsRetryable = DefaultIsRetryable
 	}
-	if opts.Sleep == nil {
-		opts.Sleep = time.Sleep
+	if retry.Sleep == nil {
+		retry.Sleep = time.Sleep
 	}
 	var err error
-	for i := 0; i < opts.MaxRetries; i++ {
-		err = Transact(ctx, conn, operation)
+	for i := 0; i < retry.MaxRetries; i++ {
+		err = TransactWithOptions(ctx, conn, txOpts, operation)
 		if err == nil {
 			return nil
 		}
-		if !opts.IsRetryable(err) {
+		if !retry.IsRetryable(err) {
 			return err
 		}
-		opts.Sleep(opts.BackOff())
+		retry.Sleep(retry.BackOff())
 	}
 	return err
 }
@@ -107,13 +132,13 @@ func (r *RollbackErr) Error() string {
 	return fmt.Sprintf("error rolling back failed transaction: %v, original transaction error: %v", r.Err, r.OriginalErr)
 }
 
-// RetryOpts controls how TransactWithRetry behaves.
-type RetryOpts struct {
+// RetryOptions controls how TransactWithRetry behaves.
+type RetryOptions struct {
 	// MaxRetries configures how many attempts will be made to complete the operation when a retryable error is
 	// encountered. The default is DefaultMaxRetries. If set to a negative number, math.MaxInt32 attempts will be made.
 	MaxRetries int
-	// BackOff controls the backoff behavior. The default backoff is an exponential backoff based on the parameters
-	// of DefaultInitialBackOff, DefaultMaxBackOff, and DefaultBackOffFactor. If a negative Duration is returned by
+	// BackOff controls the backoff behavior. The default backoff is an exponential backoff based on the values of
+	// DefaultInitialBackOff, DefaultMaxBackOff, and DefaultBackOffFactor. If a negative Duration is returned by
 	// NextBackOff(), retries will be aborted.
 	BackOff BackOffFunc
 	// IsRetryable determines whether the error from the operation should be retried. Return true to retry.
