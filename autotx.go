@@ -137,10 +137,13 @@ type RetryOptions struct {
 	// MaxRetries configures how many attempts will be made to complete the operation when a retryable error is
 	// encountered. The default is DefaultMaxRetries. If set to a negative number, math.MaxInt32 attempts will be made.
 	MaxRetries int
-	// BackOff controls the backoff behavior. The default backoff is an exponential backoff based on the values of
-	// DefaultInitialBackOff, DefaultMaxBackOff, and DefaultBackOffFactor. If a negative Duration is returned by
-	// NextBackOff(), retries will be aborted.
-	BackOff BackOffFunc
+	// BackOff is called on each retry, and should return a time.Duration indicating how long to wait before the next
+	// attempt. The default is an exponential backoff based on the values of DefaultInitialBackOff, DefaultMaxBackOff,
+	// and DefaultBackOffFactor. If a negative Duration is returned by NextBackOff(), retries will be aborted.
+	//
+	// Most backoff implementations are compatible, including github.com/cenkalti/backoff and
+	// github.com/jpillora/backoff.
+	BackOff func() time.Duration
 	// IsRetryable determines whether the error from the operation should be retried. Return true to retry.
 	IsRetryable func(err error) bool
 	// Sleep is an optional value to be used for mocking out time.Sleep() for testing. If set, backoff wait
